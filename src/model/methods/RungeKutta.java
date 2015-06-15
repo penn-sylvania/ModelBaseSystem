@@ -1,0 +1,237 @@
+package model.methods;
+
+import model.data.Condition;
+import model.data.EquationSystem;
+import model.data.Name;
+
+import java.util.*;
+
+public class RungeKutta implements IMethod {
+
+    public static final Name name = new Name("Метод Рунге-Кутта",
+            "Методы Рунге-Кутта - важное семейство численных алгоритмов решения обыкновенных " +
+            "дифференциальных уравнений и их систем. В данном случае мы имеем метод 4-го порядка, " +
+            "который является одним из наиболее применяемых на практике, так как обеспечивает высокую " +
+            "точность и в то же время отличается сравнительной простотой. Поэтому в большинстве случаев " +
+            "он упоминается в литературе просто как «метод Рунге-Кутта» без указания его порядка.");
+    public static final int STEP_COUNT = 100;
+
+    private EquationSystem system;
+    private int size;       // количество уравнений в системе
+    private double xo;      // начальные условия
+    private Double[] yo;    // начальные условия
+    private double x0, x1;  // граничные значения
+    private double h;       // шаг
+    private double[] xData;
+    private double[][] yData;
+    private double[] k1;
+    private double[] k2;
+    private double[] k3;
+    private double[] k4;
+
+    public RungeKutta(EquationSystem system) {
+        this.system = system;
+        this.size = this.system.getSize();
+
+        k1 = new double[size];
+        k2 = new double[size];
+        k3 = new double[size];
+        k4 = new double[size];
+    }
+
+    @Override
+    public String getName() {
+        return name.shortName;
+    }
+
+    public void nextStep(double x, double[] yo, double[] y1, double[] yt) {
+        for(int i = 0; i < size; i++) {
+            k1[i] = h * system.getResult(i, x, yo);
+        }
+
+        for(int i = 0; i < size; i++) {
+            yt[i] = yo[i] + k1[i] / 2.0;
+        }
+        for(int i = 0; i < size; i++) {
+            k2[i] = h * system.getResult(i, x + h / 2.0, yt);
+        }
+
+        for(int i = 0; i < size; i++) {
+            yt[i] = yo[i] + k2[i] / 2.0;
+        }
+        for(int i = 0; i < size; i++) {
+            k3[i] = h * system.getResult(i, x + h / 2.0, yt);
+        }
+
+        for(int i = 0; i < size; i++) {
+            yt[i] = yo[i] + k3[i];
+        }
+        for(int i = 0; i < size; i++) {
+            k4[i] = h * system.getResult(i, x + h, yt);
+        }
+
+        for(int i = 0; i < size; i++) {
+            y1[i] = yo[i] + (k1[i] + (2.0 * k2[i]) + (2.0 * k3[i]) + k4[i]) / 6.0;
+        }
+
+        for(int i = 0; i < size; i++) {
+            yo[i] = y1[i];
+        }
+    }
+
+    @Override
+    public void calculate(Condition condition) {
+        this.xo = condition.xo;
+        this.yo = condition.yo;
+        this.x0 = condition.x0;
+        this.x1 = condition.x1;
+        this.h = Math.abs(x1 - x0) / STEP_COUNT;
+
+        double[] yoMas = new double[size];      // y1o, y2o // начальные условия
+        double[] y1Mas = new double[size];      // y11, y21 // текущие значения
+        double[] ytMas = new double[size];      // временные значения Y
+
+        double x = xo;
+        int index;
+
+        for(int i = 0; i < size; i++) {
+            yoMas[i] = yo[i];
+        }
+
+        xData = new double[STEP_COUNT + 1];
+        yData = new double[getSize()][];
+
+        for(int i = 0; i < getSize(); i++) {
+            yData[i] = new double[STEP_COUNT + 1];
+        }
+
+        if(xo == x0) {                                                          // равно левой границе   --->
+            for(index = 0; index < STEP_COUNT + 1; x = r(x + Math.abs(h), 2), index++) {
+                xData[index] = x;
+                for(int i = 0; i < size; i++) {
+                    yData[i][index] = yoMas[i];
+                }
+                nextStep(x, yoMas, y1Mas, ytMas);
+            }
+        } else if(xo == x1) {                                                   // равно правой границе  <---
+            h = -h;
+
+            for(index = 0; index < STEP_COUNT + 1; x = r(x - Math.abs(h), 2), index++) {
+                xData[index] = x;
+                for(int i = 0; i < size; i++) {
+                    yData[i][index] = yoMas[i];
+                }
+                nextStep(x, yoMas, y1Mas, ytMas);
+            }
+        } else if(xo < x0) {                                                    // слева                 --->
+            h = Math.abs(x1 - x0) / STEP_COUNT;
+            int restStepCount = (int)r((x0 - xo) / h, 0);
+            int stepCount = STEP_COUNT + restStepCount + 1;
+
+            for(index = 0; index < stepCount; x = r(x + h, 2), index++) {
+                if(x >= x0 && x <= x1) {
+                    xData[index - restStepCount] = x;
+                    for(int i = 0; i < size; i++) {
+                        yData[i][index - restStepCount] = yoMas[i];
+                    }
+                }
+                nextStep(x, yoMas, y1Mas, ytMas);
+            }
+        } else if(xo > x1) {                                                    // справа                <---
+            h = Math.abs(x1 - x0) / STEP_COUNT;
+            int restStepCount = (int)r((xo - x1) / h, 0);
+            int stepCount = STEP_COUNT + restStepCount + 1;
+            h = -h;
+
+            for(index = 0; index < stepCount; x = r(x - Math.abs(h), 2), index++) {
+                if(x >= x0 && x <= x1) {
+                    xData[index - restStepCount] = x;
+                    for(int i = 0; i < size; i++) {
+                        yData[i][index - restStepCount] = yoMas[i];
+                    }
+                }
+                nextStep(x, yoMas, y1Mas, ytMas);
+            }
+        } else {                                                                // в интервале           <-->
+            x = xo;
+
+            LinkedList<Double> xD = new LinkedList<Double>();
+            LinkedList<LinkedList<Double>> yD = new LinkedList<LinkedList<Double>>();
+
+            for(int i = 0; i < size; i++) {
+                yD.add(new LinkedList<Double>());
+            }
+
+            for(index = 0; index < STEP_COUNT + 2; index++) {
+                if(x <= x1) {
+                    if(x >= xo) {
+                        xD.add(x);
+                        for (int i = 0; i < size; i++) {
+                            yD.get(i).add(yoMas[i]);
+                        }
+                        x = r(x + Math.abs(h), 2);
+                    } else {
+                        xD.addFirst(x);
+                        for (int i = 0; i < size; i++) {
+                            yD.get(i).addFirst(yoMas[i]);
+                        }
+                        x = r(x - Math.abs(h), 2);
+                        if(r(x, 2) < x0) {
+                            break;
+                        }
+                    }
+                    nextStep(x, yoMas, y1Mas, ytMas);
+                } else {
+                    x = xo - Math.abs(h);
+                    h = -h;
+                    for(int i = 0; i < size; i++) {
+                        yoMas[i] = yo[i];
+                    }
+                }
+            }
+
+            for (int i = 0; i < xD.size(); i++) {
+                xData[i] = xD.get(i);
+            }
+
+            for (int i = 0; i < size; i++) {
+                for (int j = 0; j < yD.get(i).size(); j++) {
+                    yData[i][j] = yD.get(i).get(j);
+                }
+            }
+        }
+    }
+
+    @Override
+    public Map<Name, Double> getData() {
+        return system.getK();
+    }
+
+    @Override
+    public void setData(Map<Name, Double> k) {
+        system.setK(k);
+    }
+
+    @Override
+    public int getSize() {
+        return size;
+    }
+
+    @Override
+    public double[] getXData() {
+        return xData;
+    }
+
+    @Override
+    public double[][] getYData() {
+        return yData;
+    }
+
+    /**
+     * функция для округления и отбрасывания "хвоста"
+     */
+    public static double r(double value, int k){
+        return (double)Math.round((Math.pow(10, k) * value)) / Math.pow(10, k);
+    }
+
+}
